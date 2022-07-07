@@ -1,0 +1,522 @@
+---
+title: "project1"
+author: "Xinhang Lyu"
+date: "11/06/2022"
+output:
+  html_document: default
+  pdf_document: default
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+load("/Users/lvxinhang/Desktop/easySHARE_rel8_0_0.rda")
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(bnlearn)
+library(Rgraphviz)
+```
+
+```{r}
+#load
+var1 = easySHARE_rel8_0_0
+#select variables
+var1 = var1 %>%  dplyr::select(c(wave,mergeid,female,age,isced1997_r,chronic_mod,eurod,smoking,br010_mod,br015_,ep005_,recall_1,recall_2,orienti,numeracy_2))
+```
+```{r}
+#rename
+var1 <- var1 %>% rename(country = mergeid)
+var1 <- var1 %>% rename(education = isced1997_r)
+var1 <- var1 %>% rename(depression = eurod)
+var1 <- var1%>% rename(alcohol = br010_mod)
+var1 <- var1%>% rename(activity = br015_)
+var1 <- var1 %>% rename(job_situation = ep005_)
+```
+```{r}
+#fill all outliers in the data with NA
+var1[var1<0] = NA
+#extract the first two characters of the variable "country"
+sub_country = substr(var1[,2],1,2)
+var1$country = sub_country
+#factor each variavle
+var1$age <- cut(var1$age, breaks = c(0,seq(60,90,10),120), ordered_result = TRUE, right = FALSE)
+var1$female <- factor(var1$female)
+var1$wave <- factor(var1$wave,ordered = TRUE)
+var1$education <- factor(var1$education, ordered = TRUE)
+var1$chronic_mod <- factor(var1$chronic_mod,ordered = TRUE)
+var1$depression <- factor(var1$depression,ordered = TRUE)
+var1$smoking <- factor(var1$smoking,ordered = TRUE)
+var1$alcohol <- factor(var1$alcohol,ordered = TRUE)
+var1$activity <- factor(var1$activity,ordered = TRUE)
+var1$job_situation <- factor(var1$job_situation,ordered = TRUE)
+var1$country <- factor(var1$country,ordered = TRUE)
+```
+
+```{r}
+#selection of variables related to cognitive scores
+cogvars <- c("recall_1", "recall_2", "orienti", "numeracy_2")
+cog = easySHARE_rel8_0_0[easySHARE_rel8_0_0$wave==5,]
+cog = cog[cogvars]
+p1 = ggplot() +
+  geom_histogram(aes(x=cog$recall_1), color="darkblue", fill="lightblue") +
+  labs(x ="Recall of words, first trial")
+p2 = ggplot() +
+  geom_histogram(aes(x=cog$recall_2), color="darkblue", fill="lightblue") +
+  labs(x ="Recall of words, second trial")
+p3 = ggplot() +
+  geom_histogram(aes(x=cog$orienti), color="darkblue", fill="lightblue") +
+  labs(x ="Orientation to date")
+p4 = ggplot() +
+  geom_histogram(aes(x=cog$numeracy_2), color="darkblue", fill="lightblue") +
+  labs(x ="Numeracy Score 2 (subtraction)")
+grid.arrange(p1, p2, p3, p4, nrow = 2)
+```
+```{r}
+#create a composite score as a proxy for dementia severity
+var1$cogscore = var1$recall_1+var1$recall_2+var1$orienti+var1$numeracy_2
+var1$cogscore = cut(var1$cogscore, breaks = c(0,quantile(var1$cogscore, probs = c(.1,.4),na.rm=TRUE),29), ordered_result = TRUE)
+```
+
+```{r}
+#select wave 5
+var1 = var1[var1$wave==5,]
+var1 = subset(var1,select = -c(wave,recall_1,recall_2,orienti,numeracy_2))
+#set missing value as NA
+var = var1[complete.cases(var1),]
+```
+
+```{r}
+#cognitive scores with 3 segments
+ggplot() + geom_bar(aes(x = var$cogscore),color="darkblue", fill="lightblue")+
+  labs(x ="Cogscore")
+```
+
+##############从这里开始做eda
+```{r,fig.height=15,fig.width=15}
+#plot all variables associated with dementia
+p1 = ggplot() + geom_bar(aes(x = var$country),color="darkblue", fill="lightblue")+
+  labs(x ="Country")
+p2 = ggplot() + geom_bar(aes(x = var$female),color="darkblue", fill="lightblue")+
+  labs(x ="Female")
+p3 = ggplot() + geom_bar(aes(x = var$age),color="darkblue", fill="lightblue")+
+  labs(x ="Age")
+p4=ggplot() + geom_bar(aes(x = var$education),color="darkblue", fill="lightblue")+
+  labs(x ="Education")
+p5=ggplot() + geom_bar(aes(x = var$chronic_mod),color="darkblue", fill="lightblue")+
+  labs(x ="Number of chronic diseases")
+p6=ggplot() + geom_bar(aes(x = var$depression),color="darkblue", fill="lightblue")+
+  labs(x ="Depression")
+p7=ggplot() + geom_bar(aes(x = var$smoking),color="darkblue", fill="lightblue")+
+  labs(x ="Smoking")
+p8=ggplot() + geom_bar(aes(x = var$alcohol),color="darkblue", fill="lightblue")+
+  labs(x ="Alcohol")
+p9=ggplot() + geom_bar(aes(x = var$activity),color="darkblue", fill="lightblue")+
+  labs(x ="Activity")
+p10=ggplot() + geom_bar(aes(x = var$job_situation),color="darkblue", fill="lightblue")+
+  labs(x ="Job_situation")
+p11=ggplot() + geom_bar(aes(x = var$cogscore),color="darkblue", fill="lightblue")+
+  labs(x ="Cogscore")
+grid.arrange(p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11)
+```
+```{r}
+#Classify all variables
+levels(var$cogscore) = c("low","medium","high")
+levels(var$female) = c("male","female")
+levels(var$education) = list("primary"=c("1","2"),"secondary" = c("3","4"),"high"=c("5","6"),"no"=c("0","95","97"))
+levels(var$chronic_mod) = list("none"="0","mild" = c("1","2"),"severe"= c("3","4","5","6","7","8","9","10"))
+levels(var$depression)= list("low"=c("0","1","2"),"medium" = c("3","4","5","6","7"),"high"=c("8","9","10","11","12"))
+levels(var$smoking) = c("yes","no")
+levels(var$alcohol) = list("none" = "1", "less" = c("2","3"),"more" = c("4","5"),"everyday" = c("6","7"))
+levels(var$activity) = list("active" = "1","normal" = c("2","3"),"lazy"="4")
+levels(var$job_situation) = list("retired"="1","employed"="2","unemployed"=c("3","4","5"),"other"="97")
+```
+```{r,fig.height=15,fig.width=15}
+#plot all variables associated with dementia (after classification)
+p1 = ggplot() + geom_bar(aes(x = var$country),color="darkblue", fill="lightblue")+
+  labs(x ="Country")
+p2 = ggplot() + geom_bar(aes(x = var$female),color="darkblue", fill="lightblue")+
+  labs(x ="Gender")
+p3 = ggplot() + geom_bar(aes(x = var$age),color="darkblue", fill="lightblue")+
+  labs(x ="Age")
+p4=ggplot() + geom_bar(aes(x = var$education),color="darkblue", fill="lightblue")+
+  labs(x ="Education")
+p5=ggplot() + geom_bar(aes(x = var$chronic_mod),color="darkblue", fill="lightblue")+
+  labs(x ="Number of chronic diseases")
+p6=ggplot() + geom_bar(aes(x = var$depression),color="darkblue", fill="lightblue")+
+  labs(x ="Depression")
+p7=ggplot() + geom_bar(aes(x = var$smoking),color="darkblue", fill="lightblue")+
+  labs(x ="Smoking")
+p8=ggplot() + geom_bar(aes(x = var$alcohol),color="darkblue", fill="lightblue")+
+  labs(x ="Alcohol")
+p9=ggplot() + geom_bar(aes(x = var$activity),color="darkblue", fill="lightblue")+
+  labs(x ="Activity")
+p10=ggplot() + geom_bar(aes(x = var$job_situation),color="darkblue", fill="lightblue")+
+  labs(x ="Job_situation")
+p111=ggplot() + geom_bar(aes(x = var$cogscore),color="darkblue", fill="lightblue")+
+  labs(x ="Cogscore")
+grid.arrange(p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11)
+```
+
+
+```{r}
+data<-var %>% 
+  mutate(country=as.numeric(country),
+         female=as.numeric(female),
+         age=as.numeric(age),
+         education=as.numeric(education),
+         chronic_mod=as.numeric(chronic_mod),
+         depression=as.numeric(depression),
+         #bmi2=as.numeric(bmi2),
+         smoking=as.numeric(smoking),
+         alcohol=as.numeric(alcohol),
+         activity=as.numeric(activity),
+         job_situation=as.numeric(job_situation),
+         cogscore=as.numeric(cogscore)
+         )
+```
+```{r}
+#plot correlation diagram
+cor1<-cor(data,use = "complete.obs")
+library(PerformanceAnalytics)
+chart.Correlation(cor1, histogram=TRUE)
+```
+```{r}
+library(reshape2)
+library(ggplot2)
+#plot heat map
+cor1<-cor1 %>% 
+  round(3)
+melted_cor<-melt(cor1)
+ggplot(melted_cor,aes(x=Var1,y=Var2,fill=value))+
+  geom_tile()+
+  geom_text(aes(Var2,Var1,label=value),size=2.5)+
+  scale_fill_gradient2(low = "#00008B", high = "#A91A27", mid = "white", 
+  midpoint = 0, limit = c(-1,1), space = "Lab", 
+  name="Correlation Value")+
+  theme(axis.text.x=element_text(angle=45,hjust = 1))
+```
+```{r,fig.height=10,fig.width=15}
+#The proportion of cognitive scores for each segment in each variable
+p1 = ggplot(var,aes(x=country,fill=cogscore))+
+  geom_bar(position="fill")+
+  scale_fill_manual(values=c("lightblue","cornflowerblue","blue"))
+p2 = ggplot(var,aes(x=female,fill=cogscore))+
+  geom_bar(position="fill")+
+  scale_fill_manual(values=c("lightblue","cornflowerblue","blue"))
+p3 = ggplot(var,aes(x=age,fill=cogscore))+
+  geom_bar(position="fill")+
+  scale_fill_manual(values=c("lightblue","cornflowerblue","blue"))
+p4 = ggplot(var,aes(x=education,fill=cogscore))+
+  geom_bar(position="fill")+
+  scale_fill_manual(values=c("lightblue","cornflowerblue","blue"))
+p5 = ggplot(var,aes(x=chronic_mod,fill=cogscore))+
+  geom_bar(position="fill")+
+  scale_fill_manual(values=c("lightblue","cornflowerblue","blue"))
+p6 = ggplot(var,aes(x=depression,fill=cogscore))+
+  geom_bar(position="fill")+
+  scale_fill_manual(values=c("lightblue","cornflowerblue","blue"))
+p7 = ggplot(var,aes(x=smoking,fill=cogscore))+
+  geom_bar(position="fill")+
+  scale_fill_manual(values=c("lightblue","cornflowerblue","blue"))
+p8 = ggplot(var,aes(x=alcohol,fill=cogscore))+
+  geom_bar(position="fill")+
+  scale_fill_manual(values=c("lightblue","cornflowerblue","blue"))
+p9 = ggplot(var,aes(x=activity,fill=cogscore))+
+  geom_bar(position="fill")+
+  scale_fill_manual(values=c("lightblue","cornflowerblue","blue"))
+p10 = ggplot(var,aes(x=job_situation,fill=cogscore))+
+  geom_bar(position="fill")+
+  scale_fill_manual(values=c("lightblue","cornflowerblue","blue"))
+grid.arrange(p1,p2,p3,p4,p5,p6,p7,p8,p9,p10)
+```
+
+
+```{r}
+#set the initial blacklist and whitelist
+myblacklist = matrix(c(colnames(var)[-2],colnames(var)[-3], 
+                       colnames(var)[-1],rep("cogscore",dim(var)[2]-1),
+                       
+                  rep("female",dim(var)[2]-1),rep("age",dim(var)[2]-1),
+                       rep("country",dim(var)[2]-1),colnames(var)[-16]),
+                 
+                 byrow = FALSE,ncol=2,dimnames
+                 =list(NULL,c("from","to")))
+mywhitelist = matrix(c("alcohol","chronic_mod",
+                       "smoking","chronic_mod"
+               ), byrow = TRUE,ncol=2,dimnames
+                 =list(NULL,c("from","to")))
+```
+
+
+```{r}
+# DAG using incremental association Markov blanket(iamb)
+var.iamb =iamb(var, blacklist = myblacklist,whitelist = mywhitelist,test="mi")
+graphviz.plot(var.iamb)
+# DAG using hill-climbing
+var_narm = drop_na(var)
+var.hc =hc(var_narm, blacklist = myblacklist,whitelist = mywhitelist,score="aic")  
+graphviz.plot(var.hc,shape = "ellipse")
+```
+```{r}
+# Compare the magnitude of expected loss of these two algorithms，and select hc algorithm.
+bn.cv(var_narm,var.iamb,loss="pred", loss.args = list(target = "cogscore"))
+bn.cv(var_narm,var.hc,loss="pred", loss.args = list(target = "cogscore"))
+```
+
+```{r}
+# arcs from alcohol to smoking/chronic_mod/activity cannot be dropped (P < 0.05)
+ci.test("alcohol", "chronic_mod",c("female","country"), test = "mi", data = var)
+ci.test("alcohol", "smoking",c("female","country"), test = "mi", data = var)
+ci.test("alcohol", "activity",c("female","country"), test = "mi", data = var)
+```
+
+```{r}
+# drop "job_situation" -> "depression" (p>0.05)
+ci.test("job_situation", "depression",c("female","country","age"), test = "mi", data = var)
+```
+```{r}
+# arcs from activity to depression/chronic_mod cannot be dropped (P < 0.05)
+ci.test("activity", "depression",c("alcohol","job_situation","age"), test = "mi", data = var)
+ci.test("activity", "chronic_mod",c("alcohol","job_situation","age"), test = "mi", data = var)
+```
+```{r}
+# drop "education" -> "smoking" (p>0.05)
+ci.test("education", "smoking",c("country","job_situation"), test = "mi", data = var)
+```
+
+```{r}
+# arcs from chronic_mod to depression cannot be dropped (P < 0.05)
+ci.test("chronic_mod", "depression",c("alcohol","activity","smoking","age"), test = "mi", data = var)
+```
+
+```{r}
+# set "activity" -> "cogscore" (p<0.05)
+ci.test("activity", "cogscore",c("job_situation","age","alcohol"), test = "mi", data = var)
+```
+
+```{r}
+# set "activity" -> "smoking" (p<0.05)
+ci.test("activity", "smoking",c("job_situation","age","alcohol"), test = "mi", data = var)
+```
+
+
+```{r}
+# For the score-based implementations, missing variables must be dropped (or imputed) 
+var_narm = drop_na(var)
+# Two different scores: Bayesian information criterion (BIC) or Bayesian Dirichlet equivalent uniform posterior probabiity (BDE)
+score(var.hc, data = var_narm, type = "bic")
+score(var.hc, data = var_narm, type = "bde")
+```
+
+```{r}
+# drop "female" -> "depression"
+dag2 = var.hc
+dag2 = drop.arc(dag2, from ="female", to = "depression")
+score(dag2, data= var_narm, type = "bic")         #-255718
+score(dag2, data= var_narm, type = "bde",iss=10)  #-251819
+```
+
+```{r}
+# we cannot set "alcohol" -> "depression"
+dag3 = var.hc
+dag3 = set.arc(dag2, from ="alcohol", to = "depression")
+score(dag3, data= var_narm, type = "bic")         #-255718
+score(dag3, data= var_narm, type = "bde",iss=10)  #-251819
+```
+
+
+
+
+```{r}
+# Create blacklist and whitelist of edges
+myblacklist = matrix(c(colnames(var)[-2],colnames(var)[-3], 
+                       colnames(var)[-1],rep("cogscore",dim(var)[2]-1),
+                       "education","job_situation","female","alcohol","job_situation",
+                  rep("female",dim(var)[2]-1),rep("age",dim(var)[2]-1),
+                       rep("country",dim(var)[2]-1),colnames(var)[-16],
+                       "smoking","depression","depression","depression","smoking"),
+                 byrow = FALSE,ncol=2,dimnames
+                 =list(NULL,c("from","to")))
+mywhitelist = matrix(c("alcohol","chronic_mod",
+                       "smoking","chronic_mod",
+                       "activity","cogscore",
+                       "activity","smoking"
+               ), byrow = TRUE,ncol=2,dimnames
+                 =list(NULL,c("from","to")))
+```
+```{r}
+# Use hill-climbing to determine the DAG
+var_narm = drop_na(var)
+var.hc.new =hc(var_narm, blacklist = myblacklist,whitelist = mywhitelist,score="aic")  
+graphviz.plot(var.hc.new,
+              highlight=list(nodes=c("education","activity","depression","age","country","female","job_situation","alcohol","smoking","chronic_mod","cogscore"),
+                         arcs=matrix(c("education","cogscore","activity","cogscore","age","cogscore","depression","cogscore","country","education","country","job_situation","country","alcohol","female","job_situation","female","alcohol","age","job_situation","age","activity","age","smoking","age","chronic_mod","job_situation","education","job_situation","activity","alcohol","activity","alcohol","smoking","alcohol","chronic_mod","activity","depression","activity","chronic_mod","activity","smoking","smoking","chronic_mod","education","depression","chronic_mod","depression","smoking","depression"),byrow = TRUE, ncol=2, dimnames =list(NULL,c("from","to"))),
+                         fill="lightblue",col="lightskyblue",textCol ="darkblue" ,lwd=0.8,lty=1),
+              shape = "rectangle")
+```
+
+```{r}
+# Compare the magnitude of expected loss of these two algorithms，which indicates that the model has been optimised
+bn.cv(var_narm,var.hc,loss="pred", loss.args = list(target = "cogscore"))
+bn.cv(var_narm,var.hc.new,loss="pred", loss.args = list(target = "cogscore"))
+```
+
+```{r,fig.height=10,fig.width=6}
+library(gRain)
+var.hc.fit = bn.fit(var.hc.new, data = var, method = "bayes", iss = 10)
+graphviz.chart(var.hc.fit, layout = "dot",
+draw.levels = TRUE,grid = TRUE, scale = c(1.5, 1.3),text.col = "black", bar.col = "black", main = "Original BN")
+```
+```{r,fig.height=10,fig.width=6}
+par(pin = c(3,3))
+# Use the gRain package to set evidence (condition on an event)
+junction = compile(as.grain(var.hc.fit))
+jf = setEvidence(junction, nodes = c("education","depression","activity"), states = c("high","low","lazy"))
+graphviz.chart(as.bn.fit(jf,including.evidence = TRUE), grid = TRUE, 
+               bar.col = c(female = "black", education = "grey", 
+                           cogscore = "black",country = "black",age = "black",job_situation = "black",alcohol = "black",activity = "grey",smoking = "black",chronic_mod = "black",depression = "grey"),
+              strip.bg = c(female = "transparent", education = "grey", 
+                           cogscore = "transparent",country = "transparent",age = "transparent",job_situation = "transparent",alcohol = "transparent",activity = "grey",smoking = "transparent",chronic_mod = "transparent",depression = "grey"),
+               main = "BN with Evidence", scale = c(2, 1.7))
+```
+
+```{r}
+bn.bayes = bn.fit(var.hc.new,data=var, method = "bayes", iss = 10)
+```
+```{r}
+p1 = ggplot(mapping = aes(x = rep(seq(1:length(levels(var$age)[2:4])),3),
+                     y=matrix(t(bn.bayes$cogscore$prob[,,1,1,1][,2:4]), ncol =1), color = rep(levels(var$cogscore),
+  each = length(levels(var$age)[2:4])))) + 
+  geom_point() +
+  geom_line() +
+   ylim(c(0,1))+
+  scale_x_discrete(breaks=seq(1:length(levels(var$age)[2:4])),
+        labels=levels(var$age)[2:4]) +
+  labs(x = "Age", y= "Conditional probability", color = "Cognitive score", title ="Under primary education")
+p2 = ggplot(mapping = aes(x = rep(seq(1:length(levels(var$age)[2:4])),3),
+                     y=matrix(t(bn.bayes$cogscore$prob[,,2,1,1][,2:4]), ncol =1), color = rep(levels(var$cogscore),
+  each = length(levels(var$age)[2:4])))) + 
+  geom_point() +
+  geom_line() +
+   ylim(c(0,1))+
+  scale_x_discrete(breaks=seq(1:length(levels(var$age)[2:4])),
+        labels=levels(var$age)[2:4]) +
+  labs(x = "Age", y= "Conditional probability", color = "Cognitive score", title ="Under secondary education")
+p3 = ggplot(mapping = aes(x = rep(seq(1:length(levels(var$age)[2:4])),3),
+                     y=matrix(t(bn.bayes$cogscore$prob[,,3,1,1][,2:4]), ncol =1), color = rep(levels(var$cogscore),
+  each = length(levels(var$age)[2:4])))) + 
+  geom_point() +
+  geom_line() +
+   ylim(c(0,1))+
+  scale_x_discrete(breaks=seq(1:length(levels(var$age)[2:4])),
+        labels=levels(var$age)[2:4]) +
+  labs(x = "Age", y= "Conditional probability", color = "Cognitive score", title ="Under high education")
+p4 = ggplot(mapping = aes(x = rep(seq(1:length(levels(var$age)[2:4])),3),
+                     y=matrix(t(bn.bayes$cogscore$prob[,,4,1,1][,2:4]), ncol =1), color = rep(levels(var$cogscore),
+  each = length(levels(var$age)[2:4])))) + 
+  geom_point() +
+  geom_line() +
+   ylim(c(0,1))+
+  scale_x_discrete(breaks=seq(1:length(levels(var$age)[2:4])),
+        labels=levels(var$age)[2:4]) +
+  labs(x = "Age", y= "Conditional probability", color = "Cognitive score", title ="No education")
+
+grid.arrange(p4,p1,p2,p3)
+```
+
+```{r}
+p5 = ggplot(mapping = aes(x = rep(seq(1:length(levels(var$age)[2:4])),3),
+                     y=matrix(t(bn.bayes$cogscore$prob[,,1,2,2][,2:4]), ncol =1), color = rep(levels(var$cogscore),
+  each = length(levels(var$age)[2:4])))) + 
+  geom_point() +
+  geom_line() +
+   ylim(c(0,1))+
+  scale_x_discrete(breaks=seq(1:length(levels(var$age)[2:4])),
+        labels=levels(var$age)[2:4]) +
+  labs(x = "Age", y= "Conditional probability", color = "Cognitive score", title ="Under primary education")
+p6 = ggplot(mapping = aes(x = rep(seq(1:length(levels(var$age)[2:4])),3),
+                     y=matrix(t(bn.bayes$cogscore$prob[,,2,2,2][,2:4]), ncol =1), color = rep(levels(var$cogscore),
+  each = length(levels(var$age)[2:4])))) + 
+  geom_point() +
+  geom_line() +
+   ylim(c(0,1))+
+  scale_x_discrete(breaks=seq(1:length(levels(var$age)[2:4])),
+        labels=levels(var$age)[2:4]) +
+  labs(x = "Age", y= "Conditional probability", color = "Cognitive score", title ="Under secondary education")
+p7 = ggplot(mapping = aes(x = rep(seq(1:length(levels(var$age)[2:4])),3),
+                     y=matrix(t(bn.bayes$cogscore$prob[,,3,2,2][,2:4]), ncol =1), color = rep(levels(var$cogscore),
+  each = length(levels(var$age)[2:4])))) + 
+  geom_point() +
+  geom_line() +
+   ylim(c(0,1))+
+  scale_x_discrete(breaks=seq(1:length(levels(var$age)[2:4])),
+        labels=levels(var$age)[2:4]) +
+  labs(x = "Age", y= "Conditional probability", color = "Cognitive score", title ="Under high education")
+p8 = ggplot(mapping = aes(x = rep(seq(1:length(levels(var$age)[2:4])),3),
+                     y=matrix(t(bn.bayes$cogscore$prob[,,4,2,2][,2:4]), ncol =1), color = rep(levels(var$cogscore),
+  each = length(levels(var$age)[2:4])))) + 
+  geom_point() +
+  geom_line() +
+   ylim(c(0,1))+
+  scale_x_discrete(breaks=seq(1:length(levels(var$age)[2:4])),
+        labels=levels(var$age)[2:4]) +
+  labs(x = "Age", y= "Conditional probability", color = "Cognitive score", title ="No education")
+
+grid.arrange(p8,p5,p6,p7)
+```
+
+
+```{r}
+p9 = ggplot(mapping = aes(x = rep(seq(1:length(levels(var$age)[2:4])),3),
+                     y=matrix(t(bn.bayes$cogscore$prob[,,1,3,3][,2:4]), ncol =1), color = rep(levels(var$cogscore),
+  each = length(levels(var$age)[2:4])))) + 
+  geom_point() +
+  geom_line() +
+  ylim(c(0,1))+
+  scale_x_discrete(breaks=seq(1:length(levels(var$age)[2:4])),
+        labels=levels(var$age)[2:4]) +
+  labs(x = "Age", y= "Conditional probability", color = "Cognitive score", title ="Under primary education")
+p10 = ggplot(mapping = aes(x = rep(seq(1:length(levels(var$age)[2:4])),3),
+                     y=matrix(t(bn.bayes$cogscore$prob[,,2,3,3][,2:4]), ncol =1), color = rep(levels(var$cogscore),
+  each = length(levels(var$age)[2:4])))) + 
+  geom_point() +
+  geom_line() +
+  ylim(c(0,1))+
+  scale_x_discrete(breaks=seq(1:length(levels(var$age)[2:4])),
+        labels=levels(var$age)[2:4]) +
+  labs(x = "Age", y= "Conditional probability", color = "Cognitive score", title ="Under secondary education")
+p11 = ggplot(mapping = aes(x = rep(seq(1:length(levels(var$age)[2:4])),3),
+                     y=matrix(t(bn.bayes$cogscore$prob[,,3,3,3][,2:4]), ncol =1), 
+                     color = rep(levels(var$cogscore),
+  each = length(levels(var$age)[2:4])))) + 
+  geom_point() +
+  geom_line() +
+  ylim(c(0,1))+
+  scale_x_discrete(breaks=seq(1:length(levels(var$age)[2:4])),
+        labels=levels(var$age)[2:4]) +
+  labs(x = "Age", y= "Conditional probability", color = "Cognitive score", 
+       title ="Under high education")
+p12 = ggplot(mapping = aes(x = rep(seq(1:length(levels(var$age)[2:4])),3),
+                     y=matrix(t(bn.bayes$cogscore$prob[,,4,3,3][,2:4]), ncol =1), color = rep(levels(var$cogscore),
+  each = length(levels(var$age)[2:4])))) + 
+  geom_point() +
+  geom_line() +
+   ylim(c(0,1))+
+  scale_x_discrete(breaks=seq(1:length(levels(var$age)[2:4])),
+        labels=levels(var$age)[2:4]) +
+  labs(x = "Age", y= "Conditional probability", color = "Cognitive score", title ="No education")
+grid.arrange(p12,p9,p10,p11)
+```
+```{r,fig.height=8,fig.width=12}
+grid.arrange(p4,p1,p2,p3,p8,p5,p6,p7,p12,p9,p10,p11, nrow=3, ncol=4)
+```
+
+
+
+
+
+
+
+
+
+
