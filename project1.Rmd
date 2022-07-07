@@ -91,7 +91,7 @@ ggplot() + geom_bar(aes(x = var$cogscore),color="darkblue", fill="lightblue")+
   labs(x ="Cogscore")
 ```
 
-##############从这里开始做eda
+
 ```{r,fig.height=15,fig.width=15}
 #plot all variables associated with dementia
 p1 = ggplot() + geom_bar(aes(x = var$country),color="darkblue", fill="lightblue")+
